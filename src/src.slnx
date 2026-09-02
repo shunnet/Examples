@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/core/">
+    <Project Path="Snet.Core.Samples/Snet.Core.Samples.csproj" Id="e7989215-4148-418c-b561-9b2e0fb11b0c" />
+  </Folder>
+  <Folder Name="/daq/">
+    <Project Path="Snet.DAQ.Samples.DLL/Snet.DAQ.Samples.DLL.csproj" />
+    <Project Path="Snet.DAQ.Samples/Snet.DAQ.Samples.csproj" />
+  </Folder>
+  <Folder Name="/relay/">
+    <Project Path="Snet.Relay.Samples/Snet.Relay.Samples.csproj" />
+  </Folder>
+  <Folder Name="/tep/">
+    <Project Path="Snet.Tep.Client.Samples/Snet.Tep.Client.Samples.csproj" />
+    <Project Path="Snet.Tep.Service.Samples/Snet.Tep.Service.Samples.csproj" />
+  </Folder>
+  <Folder Name="/web/">
+    <Project Path="Snet.Api/Snet.Api.csproj" />
+    <Project Path="Snet.Service/Snet.Service.csproj" />
+  </Folder>
+</Solution>

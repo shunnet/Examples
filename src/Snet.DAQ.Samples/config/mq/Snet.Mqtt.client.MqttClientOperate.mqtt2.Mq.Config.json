@@ -1,0 +1,11 @@
+{
+  "SN": "mqtt2",
+  "IpAddress": "127.0.0.1",
+  "Port": 8222,
+  "UserName": "shunnet",
+  "Password": "shunnet",
+  "ClientID": null,
+  "MessageExpirationTime": 10000,
+  "QualityOfServiceLevel": "AtMostOnce",
+  "ResponseType": "Content"
+}
