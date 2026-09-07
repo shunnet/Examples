@@ -1,5 +1,6 @@
 ﻿using Snet.Core.mq;
 using Snet.Core.reflection;
+using System.Collections.Concurrent;
 using RD = Snet.Core.reflection.ReflectionData;
 
 namespace Snet.Core.Samples.reflection;
@@ -125,7 +126,7 @@ public static class ReflectionMqTest
     static async Task Test_Ref_ReflectionInstance()
     { try { using var r = await ReflectionOperate.InstanceAsync(new RD.Basics { DllDatas = new List<RD.DllData>() }); await r.InitAsync(); Assert(r.ReflectionInstance("noexist") == null, "Ref.ReflectionInstance - 不存在返回null", null); Assert(r.ReflectionInstance(null!) == null, "Ref.ReflectionInstance - null返回null", null); } catch (Exception ex) { Fail("Ref.ReflectionInstance", ex); } }
     static async Task Test_Ref_CreateConstructorParam()
-    { try { using var r = await ReflectionOperate.InstanceAsync(new RD.Basics { DllDatas = new List<RD.DllData>() }); await r.InitAsync(); Assert(r.CreateConstructorParam("no.dll", "NoType", new Dictionary<string, object?>()) == null, "Ref.CreateConstructorParam - DLL不存在返回null", null); } catch (Exception ex) { Fail("Ref.CreateConstructorParam", ex); } }
+    { try { using var r = await ReflectionOperate.InstanceAsync(new RD.Basics { DllDatas = new List<RD.DllData>() }); await r.InitAsync(); Assert(r.CreateConstructorParam("no.dll", "NoType", new ConcurrentDictionary<string, object?>()) == null, "Ref.CreateConstructorParam - DLL不存在返回null", null); } catch (Exception ex) { Fail("Ref.CreateConstructorParam", ex); } }
     static async Task Test_Ref_Dispose()
     { try { var r = await ReflectionOperate.InstanceAsync(new RD.Basics { DllDatas = new List<RD.DllData>() }); r.Dispose(); Assert(true, "Ref.Dispose", "已释放"); } catch (Exception ex) { Fail("Ref.Dispose", ex); } }
     static async Task Test_Ref_DisposeAsync()

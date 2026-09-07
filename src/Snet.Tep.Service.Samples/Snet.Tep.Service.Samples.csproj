@@ -7,8 +7,12 @@
 		<Nullable>enable</Nullable>
 	</PropertyGroup>
 
-	<ItemGroup>
+	<!--<ItemGroup>
 		<PackageReference Include="Snet.Tep" Version="26.236.1" />
+	</ItemGroup>-->
+
+	<ItemGroup>
+	  <ProjectReference Include="..\..\..\Shunnet\Snet\Snet.TEP\Snet.TEP.csproj" />
 	</ItemGroup>
 
 </Project>

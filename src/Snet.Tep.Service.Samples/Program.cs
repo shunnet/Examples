@@ -35,13 +35,13 @@ namespace Snet.Tep.Service.Samples
             }
             Console.WriteLine("地址信息");
             Console.WriteLine(address.ToJson(true));
-            TepMasterOperate serviceOperate = TepMasterOperate.Instance(new());
+            TepMasterOperate serviceOperate = TepMasterOperate.Instance(new() { UserName = "test", Password = "test" });
             //启动WEBAPI 
             Console.WriteLine(serviceOperate.WAOn(new WAModel("127.0.0.1", 1996)).ToJson(true));
             Console.WriteLine(serviceOperate.WARequestExample().ResultData);
             serviceOperate.OnDataEvent += ServiceOperate_OnEvent;
             serviceOperate.OnInfoEvent += ServiceOperate_OnInfoEvent;
-            OperateResult result = null;
+            OperateResult result;
 
             Console.WriteLine("1.打开");
             Console.WriteLine("2.关闭");
@@ -56,7 +56,7 @@ namespace Snet.Tep.Service.Samples
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 try
                 {
-                    int index = Console.ReadLine().ToInt();
+                    int index = (Console.ReadLine() ?? string.Empty).ToInt();
                     switch (index)
                     {
                         case 1:

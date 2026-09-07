@@ -110,10 +110,10 @@ namespace Snet.Tep.Client.Samples
 
 
             Console.WriteLine("请输入设备名称:");
-            string DevName = Console.ReadLine();
+            string? DevName = Console.ReadLine();
             Console.WriteLine("请输入设备ID:");
-            string DevID = Console.ReadLine();
-            if (DevName.IsNullOrWhiteSpace() || DevID.IsNullOrWhiteSpace())
+            string? DevID = Console.ReadLine();
+            if (string.IsNullOrWhiteSpace(DevName) || string.IsNullOrWhiteSpace(DevID))
             {
                 Console.WriteLine("用户名称或ID不能为空");
                 return;
@@ -123,7 +123,9 @@ namespace Snet.Tep.Client.Samples
             {
                 IpAddress = "127.0.0.1",
                 DevName = DevName,
-                DevID = DevID
+                DevID = DevID,
+                UserName = "test",
+                Password = "test"
             };
 
 
@@ -143,11 +145,11 @@ namespace Snet.Tep.Client.Samples
                 OperateResult result = clientOperate.DataUploadAsync(keyValues).GetAwaiter().GetResult();
                 if (result.GetDetails(out string? message))
                 {
-                    return OperateResult.CreateSuccessResult(message);
+                    return OperateResult.CreateSuccessResult(message ?? "上传成功");
                 }
                 else
                 {
-                    return OperateResult.CreateFailureResult(message);
+                    return OperateResult.CreateFailureResult(message ?? "上传失败");
                 }
 
             }
@@ -156,7 +158,8 @@ namespace Snet.Tep.Client.Samples
             int fail_count = 0;
             List<byte> bytes = new List<byte>();
             object bytesLock = new object();
-            Task.Run(async () =>
+            // 性能统计与上传循环并行运行，进程退出时随主程序一并结束。
+            _ = Task.Run(async () =>
             {
 
                 while (true)
@@ -195,7 +198,7 @@ namespace Snet.Tep.Client.Samples
 
             clientOperate.OnInfoEvent += ClientOperate_OnEvent;
             clientOperate.OnInfoEvent += ClientOperate_OnInfoEvent;
-            OperateResult result = null;
+            OperateResult result;
 
 
             for (int i = 0; i < AddressArray.Length; i++)
@@ -216,7 +219,7 @@ namespace Snet.Tep.Client.Samples
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 try
                 {
-                    int index = Console.ReadLine().ToInt();
+                    int index = (Console.ReadLine() ?? string.Empty).ToInt();
                     switch (index)
                     {
                         case 0:
@@ -278,7 +281,6 @@ namespace Snet.Tep.Client.Samples
 
                                 //Console.WriteLine(result.ToJson(true));
                             }
-                            break;
                         case 1:
                             result = clientOperate.On();
                             Console.WriteLine(result.ToJson(true));
