@@ -22,6 +22,7 @@ class Program
         验证数组组包();
         验证混合组包();
         验证Melsec十六进制();
+        验证MelsecA4C与非法设备码();
         验证位设备字节映射();
         验证超限防护();
         验证Modbus富地址();
@@ -198,6 +199,32 @@ class Program
         // W 字设备十六进制 ×2：W10 = 16 → 32
         (bi, _) = p.ParseAddress("W10");
         断言(bi == 32, $"W10(hex=16)×2 → 32，实际 {bi}");
+    }
+
+    /// <summary>
+    /// 验证新增 A4C 串口/TCP 协议复用标准 Melsec 地址模型，并确保驱动不支持的设备代码不会被错误合并进批次。
+    /// </summary>
+    static void 验证MelsecA4C与非法设备码()
+    {
+        Console.WriteLine("--- Melsec A4C 映射与非法设备码降级 ---");
+        断言(PackerHandler.CanAutoPack("MelsecA4CNet") && PackerHandler.CanAutoPack("MelsecA4CNetOverTcp"),
+            "MelsecA4CNet/MelsecA4CNetOverTcp 均已映射到 Mitsubishi Packer");
+
+        var packer = PackerFactory.GetPacker(ProtocolFamily.Mitsubishi)!;
+        断言(packer.ParseAddress("D100").ByteIndex == 200, "A4C 复用 Melsec D100 字地址模型");
+        断言(packer.GetRegionKey("D100") == "D", "A4C 复用 Melsec D 区域键");
+
+        var result = new PackerHandler(Guid.NewGuid().ToString()).AddressAutoPackOrPassthrough(
+            建地址(("D100", DataType.Short, 1, null), ("D101", DataType.Short, 1, null)),
+            "MelsecA4CNetOverTcp", 0, DataFormat.ABCD)!;
+        断言(result.AddressArray.Count(a => a.AddressDescribe?.StartsWith("packer") == true) == 1,
+            "A4C TCP 连续 D 字地址可合并为一个批次");
+
+        断言(packer.ParseAddress("Q100").ByteIndex < 0 && packer.GetRegionKey("Q100") == string.Empty,
+            "驱动不支持的 Melsec Q 设备代码不解析、不生成区域键");
+        var invalid = packer.Pack(建地址(("Q100", DataType.Short, 1, null)), 0, DataFormat.ABCD)!;
+        断言(invalid.AddressArray.Count == 1 && 是未组包(invalid.AddressArray[0]),
+            "驱动不支持的 Melsec Q100 原样降级且不丢点");
     }
 
     static void 验证位设备字节映射()
