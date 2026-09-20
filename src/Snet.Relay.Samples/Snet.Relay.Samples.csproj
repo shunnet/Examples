@@ -8,12 +8,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-	  <PackageReference Include="Snet.Kafka" Version="26.236.1" />
-	  <PackageReference Include="Snet.Mqtt" Version="26.236.1" />
-	  <PackageReference Include="Snet.NetMQ" Version="26.236.1" />
-	  <PackageReference Include="Snet.Netty" Version="26.236.1" />
-	  <PackageReference Include="Snet.RabbitMQ" Version="26.236.1" />
-	  <PackageReference Include="Snet.RocketMQ" Version="26.236.1" />
+	  <PackageReference Include="Snet.Kafka" Version="26.256.1" />
+	  <PackageReference Include="Snet.Mqtt" Version="26.256.1" />
+	  <PackageReference Include="Snet.NetMQ" Version="26.256.1" />
+	  <PackageReference Include="Snet.Netty" Version="26.256.1" />
+	  <PackageReference Include="Snet.RabbitMQ" Version="26.256.1" />
+	  <PackageReference Include="Snet.RocketMQ" Version="26.256.1" />
   </ItemGroup>
 
 </Project>

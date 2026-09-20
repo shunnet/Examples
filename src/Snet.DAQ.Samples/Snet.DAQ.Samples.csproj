@@ -24,8 +24,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="Snet.Mqtt" Version="26.236.1" />
-	  <PackageReference Include="Snet.Opc" Version="26.236.1" />
+	  <PackageReference Include="Snet.Mqtt" Version="26.256.1" />
+	  <PackageReference Include="Snet.Opc" Version="26.256.1" />
 	</ItemGroup>
 
 </Project>
