@@ -26,7 +26,7 @@
 		<PackageReference Include="Snet.Modbus" Version="26.271.1" />
 		<PackageReference Include="Snet.NetMQ" Version="26.271.1" />
 		<PackageReference Include="Snet.Netty" Version="26.271.1" />
-		<PackageReference Include="Snet.Opc" Version="26.271.1" />
+		<PackageReference Include="Snet.Opc" Version="26.271.2" />
 		<PackageReference Include="Snet.Panasonic" Version="26.271.1" />
 		<PackageReference Include="Snet.PQDIF" Version="26.271.1" />
 		<PackageReference Include="Snet.RabbitMQ" Version="26.271.1" />
