@@ -7,7 +7,7 @@
 	</PropertyGroup>
 	<ItemGroup>
 		<PackageReference Include="Snet.Mqtt" Version="26.271.1" />
-		<PackageReference Include="Snet.PerformanceTesting" Version="26.271.1" />
+		<PackageReference Include="Snet.PerformanceTesting" Version="26.272.1" />
 		<PackageReference Include="Snet.Cimon" Version="26.271.1" />
 		<PackageReference Include="Snet.AllenBradley" Version="26.271.1" />
 		<PackageReference Include="Snet.Beckhoff" Version="26.271.1" />

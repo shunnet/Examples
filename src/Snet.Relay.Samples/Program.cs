@@ -26,8 +26,8 @@ MqttClientOperate mqttClientOperate = MqttClientOperate.Instance(new MqttClientD
     Password = "shunnet",
     UserName = "shunnet",
     Port = 8845,
-    //ResponseType = YSAI.Model.@enum.ResponseType.Content, //收到的就是内容
-    //ResponseType = YSAI.Model.@enum.ResponseType.Bytes,   //发送字节string,收到到RData则是byte[]
+    //ResponseType = Snet.Model.@enum.ResponseType.Content, //收到的就是内容
+    //ResponseType = Snet.Model.@enum.ResponseType.Bytes,   //发送字节string,收到到RData则是byte[]
     ResponseType = Snet.Model.@enum.ResponseType.ContentWithTopic   //收到的是一个字符串json 里面有主题与内容
 });
 //输出日志
@@ -67,7 +67,7 @@ void OnEvent(object? sender, EventDataResult e)
 {
     LogHelper.Info(e.ToJson(true));
 
-    //当你收到的内容需要主题时,并且实例化是 RT 使用了 YSAI.Model.@enum.ResponseType.ContentWithTopic
+    //当你收到的内容需要主题时,并且实例化是 RT 使用了 Snet.Model.@enum.ResponseType.ContentWithTopic
     ResponseModel? model = e.GetSource<string>().ToJsonEntity<ResponseModel>();
 
     Console.WriteLine();
