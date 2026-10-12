@@ -13,6 +13,7 @@
 
 	<ItemGroup>
 	  <ProjectReference Include="..\..\..\Shunnet\Snet\Snet.Core\Snet.Core.csproj" />
+	  <ProjectReference Include="..\..\..\Shunnet\Snet\Snet.Driver\Snet.Driver.csproj" />
 	</ItemGroup>
 
 </Project>

@@ -35,6 +35,7 @@ class Program
         验证全链路组包解包();
         验证修复问题集();
         验证倍福组包();
+        PackerAuditRegression.Run(断言);
 
         Console.WriteLine($"\n=== 结果: 通过 {_通过}, 失败 {_失败} ===");
         if (_失败 > 0) Environment.Exit(1);
@@ -855,7 +856,7 @@ class Program
         var y1 = yas.Pack(建地址(("100", DataType.Bool, 1, null)), 0, DataFormat.ABCD)!;
         断言(组包数(y1) == 0 && 降级数(y1) == 1, "Yaskawa SFC1 线圈 Bool 降级");
         var y2 = yas.Pack(建地址(("100.1", DataType.Bool, 1, null)), 0, DataFormat.ABCD)!;
-        断言(组包数(y2) == 1, "Yaskawa 点号 Bool（SFC3 寄存器内位）仍组包");
+        断言(组包数(y2) == 0 && 降级数(y2) == 1, "Yaskawa 数字点号地址降级（当前 MemobusHelper.BuildReadCommand 不接受）");
 
         // 3) 位流批布局：批内偏移 = 位号差（驱动字读位区从批首地址起连续位流，8 位/字节 LSB-first）
         var melsec = PackerFactory.GetPacker(ProtocolFamily.Mitsubishi)!;
@@ -1101,10 +1102,10 @@ class Program
         var r2 = modbus.Pack(建地址(("x=3;100", DataType.Bool, 1, null), ("x=3;100", DataType.Int, 1, null)), 0, DataFormat.ABCD)!;
         断言(模型数(r2, "x=3;100") == 2, $"Modbus x=3;100 Bool+Int 同传都保留，实际 {模型数(r2, "x=3;100")}");
 
-        // Yaskawa 点号地址（100.1）：点号强制 SFC3 → Bool+Int 同区 → 都保留
+        // Yaskawa 数字点号已不被当前字读命令接受：Bool/Int 均降级，原始两点仍完整保留。
         var yas = PackerFactory.GetPacker(ProtocolFamily.Yaskawa)!;
         var r3 = yas.Pack(建地址(("100.1", DataType.Bool, 1, null), ("100.1", DataType.Int, 1, null)), 0, DataFormat.ABCD)!;
-        断言(模型数(r3, "100.1") == 2, $"Yaskawa 100.1 Bool+Int 同传都保留，实际 {模型数(r3, "100.1")}");
+        断言(r3.AddressArray.Count == 2 && r3.AddressArray.All(是未组包), "Yaskawa 100.1 Bool+Int 均原样降级，不丢点");
 
         // 完全相同的点（同区域+同地址名+同类型）仍去重（行为不变）
         var melsec = PackerFactory.GetPacker(ProtocolFamily.Mitsubishi)!;
@@ -1364,29 +1365,29 @@ class Program
         var rF2b = fins.Pack(建地址(("TIM100.0", DataType.Bool, 1, null)), 0, DataFormat.ABCD)!;
         断言(rF2b.AddressArray.Count(是未组包) == 1, "Fins TIM100.0 Bool 降级（0100 字读 TIM 区返回定时器值非接点）");
         // CIO100.03 + CIO100.04 位批：0100 字读从批首字边界（位 1600）起 → 批内偏移 = 位号-1600
-        // CIO100.03 → rel 3 → StartBit 0 BoolIndex 3；CIO100.04 → rel 4 → StartBit 0 BoolIndex 4
+        // FINS 大端字响应：低位 3/4 存放在第二字节（StartBit=1），位序仍为 LSB-first。
         var rF3 = fins.Pack(建地址(("CIO100.03", DataType.Bool, 1, null), ("CIO100.04", DataType.Bool, 1, null)), 0, DataFormat.ABCD)!;
         var bF3 = rF3.AddressArray.First(a => a.AddressDescribe?.StartsWith("packer") == true);
         var mF3 = (List<BytesModel>)bF3.AddressExtendParam!;
         var m0304 = mF3.OrderBy(m => m.BoolIndex).ToList();
-        断言(bF3.Length == 1 && m0304.Count == 2 && m0304[0].StartBit == 0 && m0304[0].BoolIndex == 3 && m0304[1].BoolIndex == 4,
-            $"Fins CIO100.03/.04 字边界位流批 1 字节（位号差 3/4），实际 长度{bF3.Length} [{string.Join(",", m0304.Select(m => $"{m.StartBit}/{m.BoolIndex}"))}]");
-        // 位批解包：字节[0]=0x08（位3=1）→ CIO100.03=true，位4=0 → CIO100.04=false（0100 字读字节0=字100低字节 位0-7）
+        断言(bF3.Length == 2 && m0304.Count == 2 && m0304[0].StartBit == 1 && m0304[0].BoolIndex == 3 && m0304[1].BoolIndex == 4,
+            $"Fins CIO100.03/.04 大端字位批 2 字节，实际 长度{bF3.Length} [{string.Join(",", m0304.Select(m => $"{m.StartBit}/{m.BoolIndex}"))}]");
+        // 原始字响应 [0x00, 0x08]：第二字节低位 3 为 true，低位 4 为 false。
         var bufF = new byte[bF3.Length];
-        bufF[0] = 0x08;
+        bufF[1] = 0x08;
         var resF = handler.Transform(bufF, DateTime.Now, mF3);
         var dictF = resF.ResultData as ConcurrentDictionary<string, AddressValue>;
         断言(dictF != null && dictF["CIO100.03"].ResultValue is true && dictF["CIO100.04"].ResultValue is false,
             "Fins CIO100.03=true .04=false（字边界位流解包，位3/位4）");
-        // 跨字：CIO100.08（字100高字节=位8-15）→ 字节1位0；CIO101.00 → 字节2位0
+        // 跨字的大端布局：位8→字节0位0；下一字的位0→字节3位0。
         var rF4 = fins.Pack(建地址(("CIO100.03", DataType.Bool, 1, null), ("CIO100.08", DataType.Bool, 1, null), ("CIO101.00", DataType.Bool, 1, null)), 0, DataFormat.ABCD)!;
         var bF4 = rF4.AddressArray.First(a => a.AddressDescribe?.StartsWith("packer") == true);
         var mF4 = (List<BytesModel>)bF4.AddressExtendParam!;
         var mCross = mF4.ToDictionary(m => m.Address);
-        断言(bF4.Length == 3 && mCross["CIO100.03"].StartBit == 0 && mCross["CIO100.03"].BoolIndex == 3
-            && mCross["CIO100.08"].StartBit == 1 && mCross["CIO100.08"].BoolIndex == 0
-            && mCross["CIO101.00"].StartBit == 2 && mCross["CIO101.00"].BoolIndex == 0,
-            $"Fins 跨字位批（03→byte0 bit3、08→byte1 bit0、101.00→byte2 bit0），实际 长度{bF4.Length} 03:({mCross["CIO100.03"].StartBit},{mCross["CIO100.03"].BoolIndex}) 08:({mCross["CIO100.08"].StartBit},{mCross["CIO100.08"].BoolIndex}) 101:({mCross["CIO101.00"].StartBit},{mCross["CIO101.00"].BoolIndex})");
+        断言(bF4.Length == 4 && mCross["CIO100.03"].StartBit == 1 && mCross["CIO100.03"].BoolIndex == 3
+            && mCross["CIO100.08"].StartBit == 0 && mCross["CIO100.08"].BoolIndex == 0
+            && mCross["CIO101.00"].StartBit == 3 && mCross["CIO101.00"].BoolIndex == 0,
+            $"Fins 跨字位批（03→byte1 bit3、08→byte0 bit0、101.00→byte3 bit0），实际 长度{bF4.Length} 03:({mCross["CIO100.03"].StartBit},{mCross["CIO100.03"].BoolIndex}) 08:({mCross["CIO100.08"].StartBit},{mCross["CIO100.08"].BoolIndex}) 101:({mCross["CIO101.00"].StartBit},{mCross["CIO101.00"].BoolIndex})");
 
         // 问题3b：String 连接级字内反转透传
         var mStr = new BytesModel("DM100", string.Empty, 0, 4, DataType.String, EncodingType.UTF8);
