@@ -30,7 +30,9 @@ internal static class PackerAuditRegression
             (ProtocolFamily.Modbus, "100", "bad=1;100", DataType.Short),
             (ProtocolFamily.Mitsubishi, "D100", "D4294967396", DataType.Short),
             (ProtocolFamily.Omron, "D100", "D2147483647", DataType.Short),
-            (ProtocolFamily.Fuji, "D100", "D100.bad", DataType.Short),
+            (ProtocolFamily.Fuji, "M1.100", "M1.100.bad", DataType.Short),
+            (ProtocolFamily.Fuji_SPB, "D100", "D100.bad", DataType.Short),
+            (ProtocolFamily.Fuji_CST, "W9.100", "W15.100", DataType.Short),
             (ProtocolFamily.Keyence, "DM100", "Q100", DataType.Short),
             (ProtocolFamily.Yokogawa, "D100", "D2147483647", DataType.Short),
             (ProtocolFamily.Panasonic, "DT100", "Q100", DataType.Short),
@@ -56,8 +58,9 @@ internal static class PackerAuditRegression
             assert(p.ParseAddress(c.Invalid).ByteIndex < 0, $"{c.Family} 拒绝非法/溢出地址 {c.Invalid}");
             assert(packed.AddressArray.Any(a => a.AddressName == c.Invalid && a.AddressDataType == c.Type),
                 $"{c.Family} 非法点原样保留，不拖垮合法点");
-            assert(packed.AddressArray.Where(IsBatch).SelectMany(Models).Any(m => m.Address == c.Valid),
-                $"{c.Family} 合法点仍可组包");
+            assert(p.SupportsAutoPack ? packed.AddressArray.Where(IsBatch).SelectMany(Models).Any(m => m.Address == c.Valid)
+                : packed.AddressArray.Any(a => a.AddressName == c.Valid && !IsBatch(a)),
+                $"{c.Family} 合法点按支持状态组包或安全透传");
             assert(packed.AddressArray.Where(IsBatch).All(a => Models(a).All(m => m.StartBit >= 0 && m.StartBit + m.Length <= a.Length)),
                 $"{c.Family} 每个解包模型均位于批次缓冲区内");
             var disabled = new AddressDetails(c.Valid, c.Type) { IsEnable = false, AddressExtendParam = new object() };
@@ -99,9 +102,9 @@ internal static class PackerAuditRegression
         assert(siemens.ParseAddress("AI10").ByteIndex == 10 && siemens.ParseAddress("AQ10").ByteIndex == 10,
             "S7 AI/AQ 根据 Driver 的非 isCT 路径按字节编址");
 
-        foreach (var family in new[] { ProtocolFamily.Omron, ProtocolFamily.Fuji, ProtocolFamily.Modbus })
+        foreach (var family in new[] { ProtocolFamily.Omron, ProtocolFamily.Fuji_SPB, ProtocolFamily.Modbus })
         {
-            string name = family switch { ProtocolFamily.Omron => "CIO100.8", ProtocolFamily.Fuji => "M100.8", _ => "100.1" };
+            string name = family switch { ProtocolFamily.Omron => "CIO100.8", ProtocolFamily.Fuji_SPB => "M100.8", _ => "100.1" };
             var one = PackerFactory.GetPacker(family)!.Pack(Create((name, DataType.Bool)), 1, DataFormat.ABCD)!;
             assert(one.AddressArray.All(a => !IsBatch(a) || a.Length <= 1), $"{family} 字边界位点不生成超过 1 字节上限的批次");
         }
@@ -171,7 +174,7 @@ internal static class PackerAuditRegression
         VerifyServerBits(ProtocolFamily.Mitsubishi, new MelsecMcServer(), "M100", "M103", assert);
         VerifyServerBits(ProtocolFamily.Keyence, new MelsecMcServer(), "M100", "M103", assert);
         VerifyServerBits(ProtocolFamily.MitsubishiFx, new MelsecFxLinksServer(), "M100", "M103", assert);
-        VerifyServerBits(ProtocolFamily.Fuji, new FujiSPBServer(), "M100.3", "M100.9", assert);
+        VerifyServerBits(ProtocolFamily.Fuji_SPB, new FujiSPBServer(), "M100.3", "M100.9", assert);
         VerifyServerBits(ProtocolFamily.Fuji, new FujiSPHServer(), "M1.100.3", "M1.100.9", assert);
         VerifyServerBits(ProtocolFamily.GE, new GeSRTPServer(), "M2", "M9", assert);
         VerifyServerBits(ProtocolFamily.Fatek, new FatekProgramServer(), "M100", "M103", assert);

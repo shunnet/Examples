@@ -36,6 +36,7 @@ class Program
         验证修复问题集();
         验证倍福组包();
         PackerAuditRegression.Run(断言);
+        PackerRepairRegression.Run(断言);
 
         Console.WriteLine($"\n=== 结果: 通过 {_通过}, 失败 {_失败} ===");
         if (_失败 > 0) Environment.Exit(1);
@@ -77,7 +78,7 @@ class Program
 
         断言(byName["DB1.DBB0"].Length == 1, "Bool → 1 字节");
         断言(byName["DB1.DBB1"].Length == 10, $"String ANSI×10 → 10 (实际 {byName["DB1.DBB1"].Length})");
-        断言(byName["DB1.DBB2"].Length == 20, $"String Unicode×10 → 20 (实际 {byName["DB1.DBB2"].Length})");
+        断言(byName["DB1.DBB2"].Length == 10, $"S7 Unicode Length=10 为字节数，实际 {byName["DB1.DBB2"].Length}");
         断言(byName["DB1.DBB3"].Length == 2, "Short → 2");
         断言(byName["DB1.DBB4"].Length == 4, "Int → 4");
         断言(byName["DB1.DBB5"].Length == 8, "Double → 8");
@@ -99,7 +100,7 @@ class Program
         断言(byName["DB1.DBB0"].EncodingType == EncodingType.GB2312, "保留 GB2312");
         断言(byName["DB1.DBB0"].Length == 32, "GB2312×32 → 32");
         断言(byName["DB1.DBB32"].EncodingType == EncodingType.Unicode, "保留 Unicode");
-        断言(byName["DB1.DBB32"].Length == 32, "Unicode×16 → 32");
+        断言(byName["DB1.DBB32"].Length == 16, "S7 Unicode Length=16 → 读取16字节");
     }
 
     static void 验证数组组包()
@@ -148,8 +149,8 @@ class Program
 
         断言(批次 == 1, "仅 Int 标量参与组包 → 1 批");
         断言(未组包 == 5, "5 个数组类型全部走未组包路径");
-        断言(r.AddressArray.All(a => !是未组包(a) || a.AddressExtendParam != null),
-            "未组包条目保留原始数据");
+        断言(r.AddressArray.Where(是未组包).All(a => addr.AddressArray.Any(original => ReferenceEquals(a, original))),
+            "未组包条目保留原始对象，不伪造字节解包模型");
     }
 
     static void 验证混合组包()
@@ -488,24 +489,26 @@ class Program
         断言(fxl.GetRegionKey("s=2;D100") == "S2|D", $"FxLinks s=2;D100 区域 = S2|D，实际 {fxl.GetRegionKey("s=2;D100")}");
 
         // Fuji SPB / CommandSettingType / SPH 补全（SPH 字 = 地址×2，位 = 字内位）
-        (fbi, fbit) = fuji.ParseAddress("M100");
+        var spb = PackerFactory.GetPacker(ProtocolFamily.Fuji_SPB)!;
+        var cst = PackerFactory.GetPacker(ProtocolFamily.Fuji_CST)!;
+        (fbi, fbit) = spb.ParseAddress("M100");
         断言(fbi == 200 && fbit == 0, $"Fuji SPB M100 → (200,0)，实际 ({fbi},{fbit})");
-        断言(fuji.ParseAddress("X10").ByteIndex == 20, $"Fuji SPB X10 → 20，实际 {fuji.ParseAddress("X10").ByteIndex}");
-        断言(fuji.ParseAddress("W9.100").ByteIndex == 200, $"Fuji CST W9.100 → 200，实际 {fuji.ParseAddress("W9.100").ByteIndex}");
-        断言(fuji.ParseAddress("TS100").ByteIndex == 200, $"Fuji CST TS100 → 200，实际 {fuji.ParseAddress("TS100").ByteIndex}");
+        断言(spb.ParseAddress("X10").ByteIndex == 20, "Fuji SPB X10 → 20");
+        断言(cst.ParseAddress("W9.100").ByteIndex == 400, "Fuji CST W9.100 四字节元素 → 400");
+        断言(cst.ParseAddress("TS100").ByteIndex == 200, "Fuji CST TS100 → 200");
         (fbi, fbit) = fuji.ParseAddress("M1.100");
         断言(fbi == 200 && fbit == 0, $"Fuji SPH M1.100 字 → (200,0)，实际 ({fbi},{fbit})");
-        // M2 非 SPH 类型（SPH 只支持 1/3/10）→ 按 SPB 解释（M 区地址2 位100，驱动 FujiSPBAddress 接受）
-        (fbi, fbit) = fuji.ParseAddress("M2.100");
+        // M2 非 SPH 类型；只有显式 SPB 模式可解释为字2，不再跨模式猜测。
+        (fbi, fbit) = spb.ParseAddress("M2.100");
         断言(fbi == 4 && fbit == 0, $"Fuji M2.100 非 SPH 类型 → SPB M区地址2 → (4,0)，实际 ({fbi},{fbit})");
         (fbi, fbit) = fuji.ParseAddress("I100");
         断言(fbi == 200 && fbit == 0, $"Fuji SPH I100 字 → (200,0)，实际 ({fbi},{fbit})");
-        断言(fuji.GetRegionKey("M100") == "M", $"Fuji SPB M100 区域 = M，实际 {fuji.GetRegionKey("M100")}");
-        断言(fuji.GetRegionKey("W9.100") == "W9", $"Fuji CST W9.100 区域 = W9，实际 {fuji.GetRegionKey("W9.100")}");
-        断言(fuji.GetRegionKey("TS100") == "TS", $"Fuji CST TS100 区域 = TS，实际 {fuji.GetRegionKey("TS100")}");
+        断言(spb.GetRegionKey("M100") == "M", "Fuji SPB M100 区域 = M");
+        断言(cst.GetRegionKey("W9.100") == "W9", "Fuji CST W9.100 区域 = W9");
+        断言(cst.GetRegionKey("TS100") == "TS", "Fuji CST TS100 区域 = TS");
 
         // Fuji SPB 无点号 Bool：X/Y/M/L/TC/CC = 绝对位号（M100=位100=字节12位4，M108=位108=字节13位4）
-        var spbM = PackerFactory.GetPacker(ProtocolFamily.Fuji)!;
+        var spbM = PackerFactory.GetPacker(ProtocolFamily.Fuji_SPB)!;
         var spbMs = (List<BytesModel>)spbM.Pack(建地址(
             ("M100", DataType.Bool, 1, null),
             ("M108", DataType.Bool, 1, null)), 0, DataFormat.ABCD)!.AddressArray[0].AddressExtendParam!;
@@ -589,7 +592,7 @@ class Program
             $"FxLinks 位流批内偏移=位号差（X0→byte0 bit0、X7→byte0 bit7），实际 (0:{fxByName["X0"].StartBit},{fxByName["X0"].BoolIndex}) (7:{fxByName["X7"].BoolIndex})");
 
         // Fuji SPB：M100-M102 连续字 → 1 批 6 字节；M100.0-M100.7 连续位 → 1 批 1 字节
-        var fuji = PackerFactory.GetPacker(ProtocolFamily.Fuji)!;
+        var fuji = PackerFactory.GetPacker(ProtocolFamily.Fuji_SPB)!;
         r = fuji.Pack(建地址(
             ("M100", DataType.Short, 1, null),
             ("M101", DataType.Short, 1, null),
@@ -612,6 +615,7 @@ class Program
         断言(r.AddressArray[0].Length == 1, $"Fuji SPB 8 位批长度 = 1 字节，实际 {r.AddressArray[0].Length}");
 
         // Fuji SPH Bool：M1.100.5-M1.100.12（字 100 内位 5-12）→ 1 批 2 字节，位跨字节正确
+        fuji = PackerFactory.GetPacker(ProtocolFamily.Fuji)!;
         r = fuji.Pack(建地址(
             ("M1.100.5", DataType.Bool, 1, null),
             ("M1.100.6", DataType.Bool, 1, null),
@@ -767,7 +771,7 @@ class Program
         断言(组包数(r8) == 0 && 降级数(r8) == 1, "GE R100 Bool 降级（R 区无位读）");
 
         // Fuji：CST 字区（TS 等）Bool 降级（驱动无 ReadBool）
-        var fuji = PackerFactory.GetPacker(ProtocolFamily.Fuji)!;
+        var fuji = PackerFactory.GetPacker(ProtocolFamily.Fuji_CST)!;
         var r9 = fuji.Pack(建地址(("TS50", DataType.Bool, 1, null)), 0, DataFormat.ABCD)!;
         断言(组包数(r9) == 0 && 降级数(r9) == 1, "Fuji TS50 Bool 降级（CST 无位读）");
 
@@ -823,7 +827,7 @@ class Program
         var cimon = PackerFactory.GetPacker(ProtocolFamily.Cimon)!;
         var r22 = cimon.Pack(建地址(("123", DataType.Int, 1, null)), 0, DataFormat.ABCD)!;
         断言(组包数(r22) == 0 && 降级数(r22) == 1, "Cimon 纯数字地址不组包（驱动无类型字母拒绝）");
-        断言(cimon.ParseAddress("D100").ByteIndex == 100, $"Cimon D100 字 → 100（地址号直接），实际 {cimon.ParseAddress("D100").ByteIndex}");
+        断言(cimon.ParseAddress("D100").ByteIndex == 200, $"Cimon D100 字 → 200字节，实际 {cimon.ParseAddress("D100").ByteIndex}");
     }
 
     /// <summary>
@@ -937,10 +941,10 @@ class Program
         断言(组包数(c1) == 0 && 降级数(c1) == 1, "Cimon D 点号 Bool 降级（cmd82 无法编码点号 + reverseByWord 反序）");
 
         // 14) Fuji CST W 类型号校验（驱动仅 9/21-26/30-109/120-123/125）+ SPB W Bool 放行
-        var fuji = PackerFactory.GetPacker(ProtocolFamily.Fuji)!;
+        var fuji = PackerFactory.GetPacker(ProtocolFamily.Fuji_CST)!;
         断言(fuji.ParseAddress("W15.100").ByteIndex < 0, "Fuji CST W15.100 不解析（驱动不支持类型15）");
-        断言(fuji.ParseAddress("W9.100").ByteIndex == 200, $"Fuji CST W9.100 → 200，实际 {fuji.ParseAddress("W9.100").ByteIndex}");
-        var f2 = fuji.Pack(建地址(("W100", DataType.Bool, 1, null)), 0, DataFormat.ABCD)!;
+        断言(fuji.ParseAddress("W9.100").ByteIndex == 400, $"Fuji CST W9.100 → 400，实际 {fuji.ParseAddress("W9.100").ByteIndex}");
+        var f2 = PackerFactory.GetPacker(ProtocolFamily.Fuji_SPB)!.Pack(建地址(("W100", DataType.Bool, 1, null)), 0, DataFormat.ABCD)!;
         断言(组包数(f2) == 1, "Fuji SPB W100 Bool 组包（不再过度降级）");
 
         // 15) Yokogawa 位区 Word 真降级（IsPackable，替代 GroupAndSort 假降级）
@@ -970,11 +974,8 @@ class Program
         断言(cpu.ParseAddress("I100").ByteIndex < 0, "LSCpu 无 I/Q 区（I100 不解析）");
         断言(cpu.ParseAddress("MW100").ByteIndex < 0, "LSCpu 位宽字母形式 MW100 驱动 HexToOct 抛异常 → 不解析");
         var cpu1 = cpu.Pack(建地址(("M100", DataType.Bool, 1, null), ("M101", DataType.Bool, 1, null)), 0, DataFormat.ABCD)!;
-        var cpu1b = cpu1.AddressArray.First(a => a.AddressDescribe?.StartsWith("packer") == true);
-        var cpuModels = (List<BytesModel>)cpu1b.AddressExtendParam!;
-        var cpuBy = cpuModels.ToDictionary(x => x.Address);
-        断言(cpu1b.Length == 2 && cpuBy["M100"].StartBit == 0 && cpuBy["M100"].BoolIndex == 0 && cpuBy["M101"].StartBit == 1 && cpuBy["M101"].BoolIndex == 2,
-            $"LSCpu M100/M101 位流批 2 字节（M101 位号差10 → 字节1位2），实际 长度{cpu1b.Length} (0:{cpuBy["M100"].StartBit},{cpuBy["M100"].BoolIndex}) (1:{cpuBy["M101"].StartBit},{cpuBy["M101"].BoolIndex})");
+        断言(组包数(cpu1) == 0 && 降级数(cpu1) == 2 && !cpu.SupportsAutoPack,
+            "LSCpu 当前命令未编码起始地址，Bool 保留单点读取");
         var cpu2 = cpu.Pack(建地址(("M100", DataType.Int, 1, null)), 0, DataFormat.ABCD)!;
         断言(组包数(cpu2) == 0 && 降级数(cpu2) == 1, "LSCpu Word 降级（驱动无字读：位宽字母形式解析必失败）");
         断言(cpu.MaxReadLength == 120 && cpu.PhysicalMaxBytes == 120, "LSCpu 无分帧保守上限 120/120");
@@ -998,12 +999,11 @@ class Program
         断言(fast.MaxReadLength == 500 && fast.PhysicalMaxBytes == 500, "LSFastEnet 无分帧保守上限 500/500");
 
         // 18c) 映射：LSCpu / LSFastEnet 现可自动组包（原未映射原样返回）
-        断言(PackerHandler.CanAutoPack("LSCpu") && PackerHandler.CanAutoPack("LSFastEnet") && PackerHandler.CanAutoPack("LSCnet"),
-            "LSCpu/LSFastEnet/LSCnet 均可自动组包");
+        断言(!PackerHandler.CanAutoPack("LSCpu") && PackerHandler.CanAutoPack("LSFastEnet") && PackerHandler.CanAutoPack("LSCnet"),
+            "仅 LSCnet/LSFastEnet 自动组包，LSCpu 保守回退");
         var cpuPassthrough = new PackerHandler(Guid.NewGuid().ToString()).AddressAutoPackOrPassthrough(
             建地址(("M100", DataType.Bool, 1, null), ("M101", DataType.Bool, 1, null)), "LSCpu", 0, DataFormat.ABCD)!;
-        断言(cpuPassthrough.AddressArray.Any(a => a.AddressDescribe?.StartsWith("packer") == true),
-            "LSCpu 地址经 AddressAutoPackOrPassthrough 组包");
+        断言(cpuPassthrough.AddressArray.All(是未组包), "LSCpu 高层入口保留原单点读取");
 
         // 19) 第三轮全量审查遗留修复锁定（2026-08-22 二次修复）
         // 19a) LSis_Cnet U/I/Q 点号批首不剥点（驱动原生解析，剥点走 default 分支读错地址）
@@ -1039,7 +1039,7 @@ class Program
         断言(组包数(c2) == 0 && 降级数(c2) == 1, "Cimon D100.5 Word 降级（cmd82 1 元素 1 字节 vs ×2 模型错位）");
 
         // 19e) Fuji 位批字边界对齐（M100.8 = 字100 位8 → 响应字节1（位1608-1615）位0；旧绝对布局差 1 字节）
-        var fuji2 = PackerFactory.GetPacker(ProtocolFamily.Fuji)!;
+        var fuji2 = PackerFactory.GetPacker(ProtocolFamily.Fuji_SPB)!;
         var f3 = fuji2.Pack(建地址(("M100.8", DataType.Bool, 1, null), ("M100.9", DataType.Bool, 1, null)), 0, DataFormat.ABCD)!;
         var f3b = f3.AddressArray.First(a => a.AddressDescribe?.StartsWith("packer") == true);
         var f3m = (List<BytesModel>)f3b.AddressExtendParam!;
@@ -1134,7 +1134,7 @@ class Program
             (ProtocolFamily.Mitsubishi, [("M100", DataType.Bool), ("D100", DataType.Int)]),
             (ProtocolFamily.MitsubishiFx, [("X10", DataType.Bool), ("D100", DataType.Int)]),
             (ProtocolFamily.Omron, [("CIO100.03", DataType.Bool), ("DM100", DataType.Int)]),
-            (ProtocolFamily.Fuji, [("M100", DataType.Bool), ("D100", DataType.Int)]),
+            (ProtocolFamily.Fuji_SPB, [("M100", DataType.Bool), ("D100", DataType.Int)]),
             (ProtocolFamily.Keyence, [("M100", DataType.Bool), ("D100", DataType.Int)]),
             (ProtocolFamily.Yokogawa, [("X10", DataType.Bool), ("D100", DataType.Int)]),
             (ProtocolFamily.Panasonic, [("X100", DataType.Bool), ("DT100", DataType.Int)]),
@@ -1181,8 +1181,8 @@ class Program
                         continue;
                     }
                     验证点++;
-                    if (!值相等(av.ResultValue, m, expectByModel[m]))
-                        Console.WriteLine($"  ✗ {f} {m.Address}({m.DataType}): 解出 {av.ResultValue} != 期望 {expectByModel[m]}");
+                    断言(值相等(av.ResultValue, m, expectByModel[m]),
+                        $"{f} {m.Address}({m.DataType}) 解出值与独立填充值一致");
                 }
             }
         }
@@ -1416,15 +1416,15 @@ class Program
         (bi, bit) = p.ParseAddress("M100.3");
         断言(bi == 100 && bit == 3, $"ADS M100.3 → (100,3)（字节 100 位 3），实际 ({bi},{bit})");
         (bi, bit) = p.ParseAddress("i=100000");
-        断言(bi == 100000 && bit == 0, $"ADS i=100000 → (100000,0)，实际 ({bi},{bit})");
+        断言(bi < 0, "ADS i=100000 为不透明句柄，不按内存偏移组包");
         (bi, _) = p.ParseAddress("ig=0xF080;100");
-        断言(bi == 100, $"ADS ig=0xF080;100 → 100，实际 {bi}");
+        断言(bi < 0, "ADS ig=0xF080 为 SumRead，不按线性内存组包");
         断言(p.ParseAddress("s=MainVar").ByteIndex < 0, "ADS s= 符号地址不解析");
 
         // 区域键：M/I/Q 分区域，ig= 带组号，i= 内存区
         断言(p.GetRegionKey("M100") == "M" && p.GetRegionKey("I100") == "I" && p.GetRegionKey("Q100") == "Q",
             $"ADS 区键 M/I/Q，实际 {p.GetRegionKey("M100")}/{p.GetRegionKey("I100")}/{p.GetRegionKey("Q100")}");
-        断言(p.GetRegionKey("ig=0xF080;100") == "IG61568", $"ADS ig=0xF080 区域 = IG61568（0xF080=61568），实际 {p.GetRegionKey("ig=0xF080;100")}");
+        断言(p.GetRegionKey("ig=0xF080;100") == "", "ADS 非线性 IndexGroup 无可组包区域");
 
         // 组包：M100/M101 连续字 → 1 批；M100.0/M100.1 连续位 → 1 批（字节空间，同字节重叠位）
         var r1 = p.Pack(建地址(("M100", DataType.Int, 1, null), ("M102", DataType.Int, 1, null)), 0, DataFormat.ABCD)!;
