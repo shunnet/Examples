@@ -37,6 +37,7 @@ class Program
         验证倍福组包();
         PackerAuditRegression.Run(断言);
         PackerRepairRegression.Run(断言);
+        PackerCurrentAuditRegression.Run(断言);
 
         Console.WriteLine($"\n=== 结果: 通过 {_通过}, 失败 {_失败} ===");
         if (_失败 > 0) Environment.Exit(1);
@@ -1093,14 +1094,16 @@ class Program
             .SelectMany(a => a.AddressExtendParam is List<BytesModel> ms ? ms : [])
             .Count(m => m.Address == 名);
 
-        // Modbus 点号地址（90.1）：Bool 与 Int 都强制 FC3 同区 → 都保留、重叠（Bool 取寄存器最低位，Int 取整寄存器）
+        // Modbus 点号仅原生 Bool 路径可解析；Bool 优化，Int 原样保留，两种类型均不能丢失。
         var modbus = PackerFactory.GetPacker(ProtocolFamily.Modbus)!;
         var r1 = modbus.Pack(建地址(("90.1", DataType.Bool, 1, null), ("90.1", DataType.Int, 1, null)), 0, DataFormat.ABCD)!;
-        断言(模型数(r1, "90.1") == 2, $"Modbus 90.1 Bool+Int 同传都保留，实际 {模型数(r1, "90.1")}");
+        断言(模型数(r1, "90.1") == 1 && r1.AddressArray.Any(a => 是未组包(a) && a.AddressName == "90.1" && a.AddressDataType == DataType.Int),
+            "Modbus 90.1 Bool 优化与 Int 单点同时保留");
 
-        // Modbus x=3;100：显式寄存器区 Bool+Int 同区 → 都保留、重叠
+        // Modbus 无点号 Bool 的生产解码不等价于寄存器内位：Bool 原样保留，Int 仍优化，两点均不能丢失。
         var r2 = modbus.Pack(建地址(("x=3;100", DataType.Bool, 1, null), ("x=3;100", DataType.Int, 1, null)), 0, DataFormat.ABCD)!;
-        断言(模型数(r2, "x=3;100") == 2, $"Modbus x=3;100 Bool+Int 同传都保留，实际 {模型数(r2, "x=3;100")}");
+        断言(模型数(r2, "x=3;100") == 1 && r2.AddressArray.Any(a => 是未组包(a) && a.AddressName == "x=3;100" && a.AddressDataType == DataType.Bool),
+            "Modbus x=3;100 Bool 单点与 Int 优化模型同时保留");
 
         // Yaskawa 数字点号已不被当前字读命令接受：Bool/Int 均降级，原始两点仍完整保留。
         var yas = PackerFactory.GetPacker(ProtocolFamily.Yaskawa)!;
@@ -1189,10 +1192,10 @@ class Program
         断言(异常 == 0, $"全链路 Transform 异常数 = {异常}");
         断言(验证点 == 全点, $"全链路解包点数 = 验证 {验证点} / 组包 {全点}");
 
-        // 边界：同名双类型同批（Modbus 90.1 Bool+Int 同 FC3 区）→ 解包必须两个点都解出
+        // 边界：合法寄存器内位90.1与数值90同批，解包必须保留两点。
         // 寄存器 Bool 位序（2026-08-14 修复）：90.1 = 寄存器90 的位1 → 在低字节（字节流末尾）位1
         var modbus = PackerFactory.GetPacker(ProtocolFamily.Modbus)!;
-        var addr2 = 建地址(("90.1", DataType.Bool, 1, null), ("90.1", DataType.Int, 1, null));
+        var addr2 = 建地址(("90.1", DataType.Bool, 1, null), ("90", DataType.Int, 1, null));
         var r2 = modbus.Pack(addr2, 0, DataFormat.ABCD)!;
         var batch2 = r2.AddressArray.First(a => a.AddressDescribe?.StartsWith("packer") == true);
         var models2 = (List<BytesModel>)batch2.AddressExtendParam!;
@@ -1204,17 +1207,17 @@ class Program
         buf2[0] = 0x00; buf2[1] = 0x02; buf2[2] = 0x00; buf2[3] = 0x00;
         var res2 = handler.Transform(buf2, DateTime.Now, models2);
         var dict2 = res2.ResultData as ConcurrentDictionary<string, AddressValue>;
-        断言(dict2 != null, "Modbus 90.1 Bool+Int 同名双类型解包有结果");
+        断言(dict2 != null, "Modbus 90.1 Bool与90 Int 同批解包有结果");
         if (dict2 != null)
         {
-            Console.WriteLine($"  Modbus 90.1 Bool+Int 同名双类型：解出 {dict2.Count}/{models2.Count} 条");
-            断言(dict2.Count == models2.Count, $"Modbus 90.1 Bool+Int 同名双类型解包都保留，实际 {dict2.Count}/{models2.Count}");
+            Console.WriteLine($"  Modbus 90.1 Bool与90 Int：解出 {dict2.Count}/{models2.Count} 条");
+            断言(dict2.Count == models2.Count, $"Modbus Bool与Int同批解包都保留，实际 {dict2.Count}/{models2.Count}");
             // 值正确性：Bool=true（低字节 0x02 位1）；Int=0x00020000（寄存器90=0x0002 + 寄存器91=0x0000，ABCD 大端）
             var boolAv = dict2.Values.FirstOrDefault(v => v.AddressDataType == DataType.Bool);
             var intAv = dict2.Values.FirstOrDefault(v => v.AddressDataType == DataType.Int);
-            断言(boolAv?.ResultValue is true, $"同名双类型 Bool 解出 true，实际 {boolAv?.ResultValue}");
-            断言(intAv?.ResultValue is int iv && iv == 0x00020000, $"同名双类型 Int 解出 0x00020000，实际 {intAv?.ResultValue}");
-            断言(boolAv?.AddressName == "90.1" && intAv?.AddressName == "90.1", "同名双类型 AddressName 都保留原始地址");
+            断言(boolAv?.ResultValue is true, $"同批 Bool 解出 true，实际 {boolAv?.ResultValue}");
+            断言(intAv?.ResultValue is int iv && iv == 0x00020000, $"同批 Int 解出 0x00020000，实际 {intAv?.ResultValue}");
+            断言(boolAv?.AddressName == "90.1" && intAv?.AddressName == "90", "同批两种类型 AddressName 都保留原始地址");
             // 反证：低字节 0x05（0b0101 位1=0）→ Bool 必须 false（旧实现误读高字节位1 会得到 true）
             buf2[1] = 0x05;
             var res2b = handler.Transform(buf2, DateTime.Now, models2);
