@@ -38,6 +38,7 @@ class Program
         PackerAuditRegression.Run(断言);
         PackerRepairRegression.Run(断言);
         PackerCurrentAuditRegression.Run(断言);
+        PackerLoopbackRegression.Run(断言);
 
         Console.WriteLine($"\n=== 结果: 通过 {_通过}, 失败 {_失败} ===");
         if (_失败 > 0) Environment.Exit(1);
@@ -981,20 +982,22 @@ class Program
         断言(组包数(cpu2) == 0 && 降级数(cpu2) == 1, "LSCpu Word 降级（驱动无字读：位宽字母形式解析必失败）");
         断言(cpu.MaxReadLength == 120 && cpu.PhysicalMaxBytes == 120, "LSCpu 无分帧保守上限 120/120");
 
-        // 18b) LSis_FastEnet（LSFastEnet.AnalysisAddress：显式 B/W/D/L 位宽 Word 可组；X=位/无位宽/UIQ/点号降级）
+        // 18b) LSis_FastEnet（LSFastEnet.AnalysisAddress：仅显式 B 位宽走 Continuous 块读取可组；
+        //      W/D/L 为单元素独立读（响应只含一个元素，变量名序号还被再乘位宽）、X=位/无位宽/UIQ/点号降级）
         var fast = PackerFactory.GetPacker(ProtocolFamily.LSis_FastEnet)!;
         断言(fast != null, "LSis_FastEnet packer 已注册");
-        断言(fast.ParseAddress("MW100").ByteIndex == 200, $"LSFastEnet MW100(字×2) → 200，实际 {fast.ParseAddress("MW100").ByteIndex}");
         断言(fast.ParseAddress("MB100").ByteIndex == 100, $"LSFastEnet MB100(字节) → 100，实际 {fast.ParseAddress("MB100").ByteIndex}");
-        断言(fast.ParseAddress("MD100").ByteIndex == 400, $"LSFastEnet MD100(双字×4) → 400，实际 {fast.ParseAddress("MD100").ByteIndex}");
-        断言(fast.ParseAddress("ML100").ByteIndex == 800, $"LSFastEnet ML100(长字×8) → 800，实际 {fast.ParseAddress("ML100").ByteIndex}");
+        foreach (var wide in new[] { "MW100", "MD100", "ML100" })
+            断言(fast.ParseAddress(wide).ByteIndex < 0, $"LSFastEnet {wide} 独立读只返回单个元素且变量名被驱动再乘位宽，不可合批");
         断言(fast.ParseAddress("MX100").ByteIndex < 0, "LSFastEnet X=位（Bit 读单地址）不组包");
         断言(fast.ParseAddress("M100").ByteIndex < 0, "LSFastEnet 无位宽（IsHex 直传与组包模型冲突）不组包");
         断言(fast.ParseAddress("I3.2.5").ByteIndex < 0, "LSFastEnet U/I/Q 10 位/字特殊编址不组包");
         断言(fast.ParseAddress("MB100.0").ByteIndex < 0, "LSFastEnet 点号位（Bit 读）不组包");
-        var fast1 = fast.Pack(建地址(("MW100", DataType.Short, 1, null), ("MW101", DataType.Short, 1, null)), 0, DataFormat.ABCD)!;
+        var fast1 = fast.Pack(建地址(("MB100", DataType.Short, 1, null), ("MB102", DataType.Short, 1, null)), 0, DataFormat.ABCD)!;
         var fast1b = fast1.AddressArray.First(a => a.AddressDescribe?.StartsWith("packer") == true);
-        断言(fast1b.Length == 4 && fast1b.AddressName == "MW100", $"LSFastEnet MW100/101 字批 4 字节，实际 长度{fast1b.Length} 批首{fast1b.AddressName}");
+        断言(fast1b.Length == 4 && fast1b.AddressName == "MB100", $"LSFastEnet MB100/102 字节块批 4 字节，实际 长度{fast1b.Length} 批首{fast1b.AddressName}");
+        var fastWide = fast.Pack(建地址(("MW100", DataType.Short, 1, null), ("MW101", DataType.Short, 1, null)), 0, DataFormat.ABCD)!;
+        断言(组包数(fastWide) == 0 && 降级数(fastWide) == 2, "LSFastEnet MW100/101 W 位宽独立读不合批，原样保留两个点");
         var fast2 = fast.Pack(建地址(("MW100", DataType.Bool, 1, null)), 0, DataFormat.ABCD)!;
         断言(组包数(fast2) == 0 && 降级数(fast2) == 1, "LSFastEnet Bool 降级（无连续位读）");
         断言(fast.MaxReadLength == 500 && fast.PhysicalMaxBytes == 500, "LSFastEnet 无分帧保守上限 500/500");
@@ -1015,9 +1018,12 @@ class Program
         var i1 = lsisCnet.Pack(建地址(("I3.2.10", DataType.Short, 1, null)), 0, DataFormat.ABCD)!;
         var i1b = i1.AddressArray.First(a => a.AddressDescribe?.StartsWith("packer") == true);
         断言(i1b.AddressName == "I3.2.10", $"LSis_Cnet I3.2.10 批首不剥点，实际 {i1b.AddressName}");
-        var mb1 = lsisCnet.Pack(建地址(("MB100.3", DataType.Bool, 1, null)), 0, DataFormat.ABCD)!;
+        var mb1 = lsisCnet.Pack(建地址(("M100.3", DataType.Bool, 1, null)), 0, DataFormat.ABCD)!;
         var mb1b = mb1.AddressArray.First(a => a.AddressDescribe?.StartsWith("packer") == true);
-        断言(mb1b.AddressName == "MB100", $"LSis_Cnet 普通点号 MB100.3 批首仍剥点，实际 {mb1b.AddressName}");
+        断言(mb1b.AddressName == "M100", $"LSis_Cnet 无位宽点号 M100.3 批首仍剥点，实际 {mb1b.AddressName}");
+        // 显式位宽 Bool：单点 ReadBool 经 AnalysisAddress 把地址号再乘位宽（MB100 → %MB200），与批读位置不同 → 透传（2026-11 回环对照）
+        var mbExplicit = lsisCnet.Pack(建地址(("MB100.3", DataType.Bool, 1, null)), 0, DataFormat.ABCD)!;
+        断言(mbExplicit.AddressArray.All(是未组包), "LSis_Cnet 显式位宽 MB100.3 Bool 原样透传，不与批读错位");
 
         // 19b) Melsec/Keyence/Vigor 尾随点号拒绝（旧实现静默截断 → 批首带点 → 驱动 FormatException 整批失败）
         var melsec2 = PackerFactory.GetPacker(ProtocolFamily.Mitsubishi)!;

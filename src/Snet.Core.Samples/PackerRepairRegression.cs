@@ -153,7 +153,7 @@ internal static class PackerRepairRegression
             (ProtocolFamily.Fanuc, "D100", "D108", DataType.Short),
             (ProtocolFamily.LSis_Cnet, "MW100", "MW108", DataType.Short),
             (ProtocolFamily.LSis_Cpu, "M100", "M108", DataType.Bool),
-            (ProtocolFamily.LSis_FastEnet, "MW100", "MW108", DataType.Short),
+            (ProtocolFamily.LSis_FastEnet, "MB100", "MB108", DataType.Short),
             (ProtocolFamily.Cimon, "D100", "D108", DataType.Short),
             (ProtocolFamily.XinJE, "D100", "D108", DataType.Short),
             (ProtocolFamily.Vigor, "C200", "C208", DataType.Short),
@@ -200,7 +200,7 @@ internal static class PackerRepairRegression
             ("Vigor", new VigorServer(), "D100"), ("XinJE", new XinJEServer(), "D100"),
             ("Cimon", new CimonServer(), "D100"), ("Beckhoff", new BeckhoffAdsServer(), "M100"),
             ("Yaskawa", new MemobusTcpServer(), "100"),
-            ("LSis_Cnet", new LSisServer(), "MW100"), ("LSis_FastEnet", new LSisServer(), "MW100"),
+            ("LSis_Cnet", new LSisServer(), "MW100"), ("LSis_FastEnet", new LSisServer(), "MB100"),
             ("Fanuc", new Snet.Driver.Robot.FANUC.FanucRobotServer(), "D100")
         })
         using (server)

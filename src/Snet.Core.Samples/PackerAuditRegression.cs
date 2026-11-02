@@ -42,7 +42,7 @@ internal static class PackerAuditRegression
             (ProtocolFamily.Fanuc, "D100", "D100garbage", DataType.Short),
             (ProtocolFamily.LSis_Cnet, "MW100", "MW100.bad", DataType.Short),
             (ProtocolFamily.LSis_Cpu, "M100", "M100000000", DataType.Bool),
-            (ProtocolFamily.LSis_FastEnet, "MW100", "MWgarbage100", DataType.Short),
+            (ProtocolFamily.LSis_FastEnet, "MB100", "MBgarbage100", DataType.Short),
             (ProtocolFamily.Cimon, "D100", "D100.bad!", DataType.Short),
             (ProtocolFamily.XinJE, "D100", "D4294967396", DataType.Short),
             (ProtocolFamily.Vigor, "C200", "C2147483647", DataType.Short),

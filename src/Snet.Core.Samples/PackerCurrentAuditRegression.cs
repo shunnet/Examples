@@ -78,8 +78,6 @@ internal static class PackerCurrentAuditRegression
         {
             (ProtocolFamily.Siemens, "M2097151.7", "M2097152", DataType.Bool),
             (ProtocolFamily.Siemens, "DB1.DBB2097151", "DB1.DBB2097152", DataType.Byte),
-            (ProtocolFamily.Siemens, "C16777215", "C16777216", DataType.Short),
-            (ProtocolFamily.Siemens, "T16777215", "T16777216", DataType.Short),
             (ProtocolFamily.Mitsubishi, "D999999", "D1000000", DataType.Short),
             (ProtocolFamily.Mitsubishi, "WFFFFFF", "W1000000", DataType.Short),
             (ProtocolFamily.Mitsubishi, "ZR16777215", "ZR16777216", DataType.Short),
@@ -106,6 +104,11 @@ internal static class PackerCurrentAuditRegression
             assert(p.ParseAddress(c.Overflow).ByteIndex < 0 && output.Any(v => ReferenceEquals(v, invalid)),
                 $"{c.Family} 超出字段 {c.Overflow} 原样保留，禁止截断或回绕后合批");
         }
+        // T/C 的元素编号仍按 24 位字段校验（仅解析诊断；组包一律降级，见 VerifyS7WordOnlyAreas）
+        var s7 = PackerFactory.GetPacker(ProtocolFamily.Siemens)!;
+        foreach (string area in new[] { "T", "C" })
+            assert(s7.ParseAddress(area + "16777215").ByteIndex >= 0 && s7.ParseAddress(area + "16777216").ByteIndex < 0,
+                $"S7 {area} 元素号按 24 位字段校验，超出一位即拒绝");
         foreach (string name in new[] { "T1.0", "C1.0" })
         {
             var point = new AddressDetails(name, DataType.Short);
@@ -180,21 +183,32 @@ internal static class PackerCurrentAuditRegression
             "Modbus 字节序修正不修改原样透传点的历史扩展模型");
     }
 
-    /// <summary>校验 S7 按字编码数量的区域，禁止从合并批掩盖单字节和奇数字节文本的原生读取差异。</summary>
+    /// <summary>
+    /// 校验 S7 T/C/AI/AQ 一律单点读取：Driver 对这些区的多元素响应解析不可靠（定时器 5 字节/计数器 3 字节元素靠“能否被 3 整除”猜测，
+    /// 元素数为 3 的倍数的定时器解出错值；膨胀后的响应超过 PDU 时整批失败；AI/AQ 奇数字节批抛越界异常），
+    /// 回环 S7 服务端对真实命令的逐长度探测见 PackerLoopbackRegression。
+    /// </summary>
     /// <param name="assert">接收断言结果及中文说明的回调。</param>
     private static void VerifyS7WordOnlyAreas(Action<bool, string> assert)
     {
         foreach (string region in new[] { "T", "C", "AI", "AQ" })
         {
-            var singleByte = new AddressDetails(region + "100", DataType.Byte);
-            var oddText = new AddressDetails(region + "100", DataType.String, 3);
-            var evenText = new AddressDetails(region + "100", DataType.String, 4);
-            assert(ReferenceEquals(Pack(ProtocolFamily.Siemens, singleByte).Single(), singleByte), $"S7 {region} 单字节点保留原生按字读取行为");
-            assert(ReferenceEquals(Pack(ProtocolFamily.Siemens, oddText).Single(), oddText), $"S7 {region} 奇数文本原样保留，避免批长度与真实响应不符");
-            assert(IsBatch(Pack(ProtocolFamily.Siemens, evenText).Single()), $"S7 {region} 偶数文本继续按原生字节数优化");
+            foreach (var point in new[]
+            {
+                new AddressDetails(region + "100", DataType.Byte), new AddressDetails(region + "100", DataType.Short),
+                new AddressDetails(region + "100", DataType.Int), new AddressDetails(region + "100", DataType.String, 3),
+                new AddressDetails(region + "100", DataType.String, 4)
+            })
+                assert(ReferenceEquals(Pack(ProtocolFamily.Siemens, point).Single(), point),
+                    $"S7 {region} {point.AddressDataType}/{point.Length} 保留原生单点读取，不合入多元素批");
+            var pair = Pack(ProtocolFamily.Siemens, new AddressDetails(region + "100", DataType.Short), new AddressDetails(region + "101", DataType.Short));
+            assert(pair.Count == 2 && pair.All(a => !IsBatch(a)), $"S7 {region} 相邻两点也不合批");
         }
         assert(IsBatch(Pack(ProtocolFamily.Siemens, new AddressDetails("M100", DataType.String, 3)).Single()),
             "S7 普通字节内存仍支持奇数字节文本");
+        foreach (string region in new[] { "M", "I", "Q", "V" })
+            assert(IsBatch(Pack(ProtocolFamily.Siemens, new AddressDetails(region + "100", DataType.Short), new AddressDetails(region + "104", DataType.Int))[0]),
+                $"S7 {region} 字节内存继续组包");
     }
 
     /// <summary>使用真实命令生成器独立证明字段截断和数量取整，避免测试只复述 Packer 自己定义的上限。</summary>
