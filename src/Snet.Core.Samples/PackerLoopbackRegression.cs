@@ -1,12 +1,12 @@
-using System.Collections.Concurrent;
-using System.Net;
-using TcpListener = System.Net.Sockets.TcpListener;
-using Snet.Core.handler;
+﻿using Snet.Core.handler;
 using Snet.Core.packer;
 using Snet.Driver.Profinet.LSIS;
 using Snet.Driver.Profinet.Siemens;
 using Snet.Model.data;
 using Snet.Model.@enum;
+using System.Collections.Concurrent;
+using System.Net;
+using TcpListener = System.Net.Sockets.TcpListener;
 
 namespace Snet.Core.Samples;
 

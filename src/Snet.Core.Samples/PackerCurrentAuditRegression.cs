@@ -1,20 +1,20 @@
-using System.Collections.Concurrent;
-using System.Text;
-using Snet.Core.handler;
+﻿using Snet.Core.handler;
 using Snet.Core.packer;
 using Snet.Driver;
 using Snet.Driver.Core.Address;
-using Snet.Driver.Profinet.Beckhoff.Helper;
-using Snet.Driver.Profinet.GE;
-using Snet.Driver.Profinet.Vigor;
-using Snet.Driver.Profinet.Vigor.Helper;
 using Snet.Driver.ModBus;
+using Snet.Driver.Profinet.Beckhoff.Helper;
 using Snet.Driver.Profinet.Cimon.Helper;
+using Snet.Driver.Profinet.GE;
 using Snet.Driver.Profinet.Melsec.Helper;
 using Snet.Driver.Profinet.Siemens;
-using System.Reflection;
+using Snet.Driver.Profinet.Vigor;
+using Snet.Driver.Profinet.Vigor.Helper;
 using Snet.Model.data;
 using Snet.Model.@enum;
+using System.Collections.Concurrent;
+using System.Reflection;
+using System.Text;
 
 namespace Snet.Core.Samples;
 
@@ -40,28 +40,28 @@ internal static class PackerCurrentAuditRegression
     {
         using var device = new AuditVigorDevice();
         foreach (string first in new[] { "D100", "C100", "C200", "C300" })
-        foreach (var encoding in new[] { EncodingType.UTF8, EncodingType.Unicode })
-        {
-            string next = first[0] + (int.Parse(first[1..]) + 1).ToString();
-            var points = new[] { new AddressDetails(first, DataType.String, 4, encoding), new AddressDetails(next, DataType.String, 2, encoding) };
-            var batch = Pack(ProtocolFamily.Vigor, points).Single();
-            var models = (List<BytesModel>)batch.AddressExtendParam!;
-            Encoding codec = encoding == EncodingType.Unicode ? Encoding.Unicode : Encoding.UTF8;
-            var response = device.Read(batch.AddressName, batch.Length);
-            var decoded = new BytesHandler().Transform(response.Content, DateTime.Now, models);
-            var values = (ConcurrentDictionary<string, AddressValue>)decoded.ResultData!;
-            var asyncDecoded = new BytesHandler().TransformAsync(response.Content, DateTime.Now, models).GetAwaiter().GetResult();
-            var asyncValues = (ConcurrentDictionary<string, AddressValue>)asyncDecoded.ResultData!;
-            foreach (var point in points)
+            foreach (var encoding in new[] { EncodingType.UTF8, EncodingType.Unicode })
             {
-                var direct = device.ReadString(point.AddressName, point.Length, codec);
-                var asyncDirect = device.ReadStringAsync(point.AddressName, point.Length, codec).GetAwaiter().GetResult();
-                assert(decoded.Status && direct.IsSuccess && Equals(values.Values.Single(v => v.AddressName == point.AddressName).ResultValue, direct.Content),
-                    $"Vigor {point.AddressName}/{encoding} 组包文本与原生 ReadString 完全一致");
-                assert(asyncDecoded.Status && asyncDirect.IsSuccess && Equals(asyncValues.Values.Single(v => v.AddressName == point.AddressName).ResultValue, asyncDirect.Content),
-                    $"Vigor {point.AddressName}/{encoding} 异步组包文本与原生 ReadStringAsync 完全一致");
+                string next = first[0] + (int.Parse(first[1..]) + 1).ToString();
+                var points = new[] { new AddressDetails(first, DataType.String, 4, encoding), new AddressDetails(next, DataType.String, 2, encoding) };
+                var batch = Pack(ProtocolFamily.Vigor, points).Single();
+                var models = (List<BytesModel>)batch.AddressExtendParam!;
+                Encoding codec = encoding == EncodingType.Unicode ? Encoding.Unicode : Encoding.UTF8;
+                var response = device.Read(batch.AddressName, batch.Length);
+                var decoded = new BytesHandler().Transform(response.Content, DateTime.Now, models);
+                var values = (ConcurrentDictionary<string, AddressValue>)decoded.ResultData!;
+                var asyncDecoded = new BytesHandler().TransformAsync(response.Content, DateTime.Now, models).GetAwaiter().GetResult();
+                var asyncValues = (ConcurrentDictionary<string, AddressValue>)asyncDecoded.ResultData!;
+                foreach (var point in points)
+                {
+                    var direct = device.ReadString(point.AddressName, point.Length, codec);
+                    var asyncDirect = device.ReadStringAsync(point.AddressName, point.Length, codec).GetAwaiter().GetResult();
+                    assert(decoded.Status && direct.IsSuccess && Equals(values.Values.Single(v => v.AddressName == point.AddressName).ResultValue, direct.Content),
+                        $"Vigor {point.AddressName}/{encoding} 组包文本与原生 ReadString 完全一致");
+                    assert(asyncDecoded.Status && asyncDirect.IsSuccess && Equals(asyncValues.Values.Single(v => v.AddressName == point.AddressName).ResultValue, asyncDirect.Content),
+                        $"Vigor {point.AddressName}/{encoding} 异步组包文本与原生 ReadStringAsync 完全一致");
+                }
             }
-        }
         var oversized = new AddressDetails("C200", DataType.String, 4);
         var limited = PackerFactory.GetPacker(ProtocolFamily.Vigor)!.Pack(new Address(oversized), 8, DataFormat.ABCD)!;
         assert(ReferenceEquals(limited.AddressArray.Single(), oversized), "Vigor C200 文本需16字节，8字节上限时完整透传原点");

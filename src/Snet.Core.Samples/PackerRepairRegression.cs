@@ -1,30 +1,30 @@
-using System.Collections.Concurrent;
-using System.Text;
+﻿using Snet.Core.@abstract;
 using Snet.Core.handler;
 using Snet.Core.packer;
-using Snet.Core.@abstract;
+using Snet.Driver.Core.Address;
 using Snet.Driver.Core.Device;
+using Snet.Driver.ModBus;
 using Snet.Driver.Profinet.AllenBradley;
 using Snet.Driver.Profinet.Beckhoff;
 using Snet.Driver.Profinet.Cimon;
 using Snet.Driver.Profinet.FATEK;
+using Snet.Driver.Profinet.Fuji;
 using Snet.Driver.Profinet.GE;
 using Snet.Driver.Profinet.LSIS;
+using Snet.Driver.Profinet.Melsec;
 using Snet.Driver.Profinet.Melsec.Helper;
 using Snet.Driver.Profinet.Omron;
 using Snet.Driver.Profinet.Panasonic;
+using Snet.Driver.Profinet.Siemens;
 using Snet.Driver.Profinet.Toyota;
 using Snet.Driver.Profinet.Vigor;
 using Snet.Driver.Profinet.XINJE;
-using Snet.Driver.Profinet.Yokogawa;
 using Snet.Driver.Profinet.YASKAWA;
-using Snet.Driver.ModBus;
-using Snet.Driver.Core.Address;
-using Snet.Driver.Profinet.Fuji;
-using Snet.Driver.Profinet.Melsec;
-using Snet.Driver.Profinet.Siemens;
+using Snet.Driver.Profinet.Yokogawa;
 using Snet.Model.data;
 using Snet.Model.@enum;
+using System.Collections.Concurrent;
+using System.Text;
 
 namespace Snet.Core.Samples;
 
@@ -118,8 +118,8 @@ internal static class PackerRepairRegression
             ("Omron", new[] { "D65536", "CIO65536.0", "EM0.65536" }),
             ("Fanuc", new[] { "D65536", "AI65536", "AQ65536", "GI65536" })
         })
-        foreach (string name in names)
-            assert(Pack(vendor, new AddressDetails(name, DataType.Short)).All(a => !IsBatch(a)), $"F14 {vendor} {name} UInt16 越界降级");
+            foreach (string name in names)
+                assert(Pack(vendor, new AddressDetails(name, DataType.Short)).All(a => !IsBatch(a)), $"F14 {vendor} {name} UInt16 越界降级");
         foreach (var (vendor, name, valid) in new (string, string, Func<string, bool>)[]
         {
             ("Mitsubishi", "dy10", a => McAddressData.ParseMelsecFrom(a, 1, true).IsSuccess),
@@ -164,24 +164,24 @@ internal static class PackerRepairRegression
         };
         assert(cases.Select(c => c.Family).ToHashSet().SetEquals(PackerFactory.GetRegisteredFamilies()), "全量矩阵与全部注册协议模式一致，不漏新增模式");
         foreach (var c in cases)
-        foreach (int max in new[] { 1, 2, 3, 4, 7, 8, 17, 64, 128, 255, 1000, 10000 })
-        {
-            var p = PackerFactory.GetPacker(c.Family)!;
-            var first = new AddressDetails(c.First, c.Type);
-            var second = new AddressDetails(c.Second, c.Type);
-            var invalid = new AddressDetails("!bad!", DataType.Short);
-            var disabled = new AddressDetails(c.First, c.Type) { IsEnable = false };
-            var virtualPoint = new AddressDetails(c.First, c.Type) { AddressType = AddressType.VirtualStatic, AddressExtendParam = new object() };
-            var packed = p.Pack(new Address(new List<AddressDetails> { first, second, invalid, disabled, virtualPoint }), max, DataFormat.ABCD)!;
-            assert(packed.AddressArray.Sum(a => IsBatch(a) ? ((List<BytesModel>)a.AddressExtendParam!).Count : 1) == 5,
-                $"{c.Family}/{max} 所有原点都存在");
-            assert(packed.AddressArray.Where(IsBatch).All(a => a.Length <= Math.Min(max, p.PhysicalMaxBytes)
-                && ((List<BytesModel>)a.AddressExtendParam!).All(m => m.StartBit >= 0 && (long)m.StartBit + m.Length <= a.Length)),
-                $"{c.Family}/{max} 所有模型均位于有效批范围");
-            assert(first.AddressExtendParam == null && second.AddressExtendParam == null
-                && packed.AddressArray.Any(a => ReferenceEquals(a, virtualPoint)) && packed.AddressArray.Any(a => ReferenceEquals(a, disabled)),
-                $"{c.Family}/{max} 输入元数据、禁用点、虚拟点不被改变");
-        }
+            foreach (int max in new[] { 1, 2, 3, 4, 7, 8, 17, 64, 128, 255, 1000, 10000 })
+            {
+                var p = PackerFactory.GetPacker(c.Family)!;
+                var first = new AddressDetails(c.First, c.Type);
+                var second = new AddressDetails(c.Second, c.Type);
+                var invalid = new AddressDetails("!bad!", DataType.Short);
+                var disabled = new AddressDetails(c.First, c.Type) { IsEnable = false };
+                var virtualPoint = new AddressDetails(c.First, c.Type) { AddressType = AddressType.VirtualStatic, AddressExtendParam = new object() };
+                var packed = p.Pack(new Address(new List<AddressDetails> { first, second, invalid, disabled, virtualPoint }), max, DataFormat.ABCD)!;
+                assert(packed.AddressArray.Sum(a => IsBatch(a) ? ((List<BytesModel>)a.AddressExtendParam!).Count : 1) == 5,
+                    $"{c.Family}/{max} 所有原点都存在");
+                assert(packed.AddressArray.Where(IsBatch).All(a => a.Length <= Math.Min(max, p.PhysicalMaxBytes)
+                    && ((List<BytesModel>)a.AddressExtendParam!).All(m => m.StartBit >= 0 && (long)m.StartBit + m.Length <= a.Length)),
+                    $"{c.Family}/{max} 所有模型均位于有效批范围");
+                assert(first.AddressExtendParam == null && second.AddressExtendParam == null
+                    && packed.AddressArray.Any(a => ReferenceEquals(a, virtualPoint)) && packed.AddressArray.Any(a => ReferenceEquals(a, disabled)),
+                    $"{c.Family}/{max} 输入元数据、禁用点、虚拟点不被改变");
+            }
     }
 
     /// <summary>使用原生内存服务端独立计算文本期望，逐协议检查 ASCII/UTF16 与 String/Char 的长度单位。</summary>
@@ -203,27 +203,27 @@ internal static class PackerRepairRegression
             ("LSis_Cnet", new LSisServer(), "MW100"), ("LSis_FastEnet", new LSisServer(), "MB100"),
             ("Fanuc", new Snet.Driver.Robot.FANUC.FanucRobotServer(), "D100")
         })
-        using (server)
-        foreach (var encoding in new[] { EncodingType.ASCII, EncodingType.Unicode })
-        foreach (var type in new[] { DataType.String, DataType.Char })
-        {
-            var bytes = Encoding.ASCII.GetBytes("ABCDEFGHIJKLMNOP");
-            var write = server.Write(name, bytes);
-            var codec = encoding == EncodingType.Unicode ? Encoding.Unicode : Encoding.ASCII;
-            // GE 客户端先把 R/AI/AQ 的字节长度除二写入命令；服务端 Read 接收的是命令中的字数，不能直接混用。
-            byte[] Read(string address, ushort length)
-            {
-                if (server is GeSRTPServer)
-                {
-                    byte[] command = GeHelper.BuildReadCommand(address, length, false).Content;
-                    return server.Read(address, BitConverter.ToUInt16(command, 46)).Content;
-                }
-                return server.Read(address, length).Content;
-            }
-            var expected = codec.GetString(Read(name, 4));
-            assert(write.IsSuccess, $"{vendor} 原生文本夹具写入成功");
-            VerifyText(assert, vendor, expected, new(name, type, 4, encoding), Read);
-        }
+            using (server)
+                foreach (var encoding in new[] { EncodingType.ASCII, EncodingType.Unicode })
+                    foreach (var type in new[] { DataType.String, DataType.Char })
+                    {
+                        var bytes = Encoding.ASCII.GetBytes("ABCDEFGHIJKLMNOP");
+                        var write = server.Write(name, bytes);
+                        var codec = encoding == EncodingType.Unicode ? Encoding.Unicode : Encoding.ASCII;
+                        // GE 客户端先把 R/AI/AQ 的字节长度除二写入命令；服务端 Read 接收的是命令中的字数，不能直接混用。
+                        byte[] Read(string address, ushort length)
+                        {
+                            if (server is GeSRTPServer)
+                            {
+                                byte[] command = GeHelper.BuildReadCommand(address, length, false).Content;
+                                return server.Read(address, BitConverter.ToUInt16(command, 46)).Content;
+                            }
+                            return server.Read(address, length).Content;
+                        }
+                        var expected = codec.GetString(Read(name, 4));
+                        assert(write.IsSuccess, $"{vendor} 原生文本夹具写入成功");
+                        VerifyText(assert, vendor, expected, new(name, type, 4, encoding), Read);
+                    }
     }
 
     /// <summary>真实命令分帧后按帧地址读取内存服务端，验证大跨度位点与边界值，而非一次性线性伪响应。</summary>
@@ -313,17 +313,17 @@ internal static class PackerRepairRegression
             ("Fuji_CST", new FujiCommandSettingTypeServer(), "BD100", "BD101"),
             ("Fuji_CST", new FujiCommandSettingTypeServer(), "S100", "S101")
         })
-        using (server)
-        {
-            server.Write(first, new byte[] { 0x11, 0x22 });
-            server.Write(second, new byte[] { 0x77, 0x88 });
-            var batch = Pack(vendor, new(first, DataType.Byte), new(second, DataType.Byte)).Single();
-            var decoded = new BytesHandler().Transform(server.Read(batch.AddressName, batch.Length).Content, DateTime.Now,
-                (List<BytesModel>)batch.AddressExtendParam!);
-            var expected = server.Read(second, 1).Content[0];
-            assert(decoded.Status && Equals(Values(decoded).Single(v => v.AddressName == second).ResultValue, expected),
-                $"新增契约 {vendor}/{second} 不因字节、字、双字设备宽度差异静默错值");
-        }
+            using (server)
+            {
+                server.Write(first, new byte[] { 0x11, 0x22 });
+                server.Write(second, new byte[] { 0x77, 0x88 });
+                var batch = Pack(vendor, new(first, DataType.Byte), new(second, DataType.Byte)).Single();
+                var decoded = new BytesHandler().Transform(server.Read(batch.AddressName, batch.Length).Content, DateTime.Now,
+                    (List<BytesModel>)batch.AddressExtendParam!);
+                var expected = server.Read(second, 1).Content[0];
+                assert(decoded.Status && Equals(Values(decoded).Single(v => v.AddressName == second).ResultValue, expected),
+                    $"新增契约 {vendor}/{second} 不因字节、字、双字设备宽度差异静默错值");
+            }
         var bit = new AddressDetails("M100", DataType.Bool);
         assert(ReferenceEquals(Pack("Cimon", bit).Single(), bit), "Cimon 位读114不能由字读82代替，完整保留单点");
         foreach (string vendor in new[] { "DeltaTcpNet", "DeltaSerial", "DeltaSerialOverTcp", "DeltaSerialAscii", "DeltaSerialAsciiOverTcp",
@@ -334,9 +334,9 @@ internal static class PackerRepairRegression
                 $"{vendor} 无系列信息不宣称可优化原生设备地址，完整透传");
         }
         foreach (string code in new[] { "ID", "QD" })
-        foreach (int boundary in new[] { 10000, 20000, 30000 })
-            assert(Pack("XinJE", new(code + (boundary - 1), DataType.Short), new(code + boundary, DataType.Short)).Count == 2,
-                $"XinJE XD {code}{boundary} 物理地址分段不跨批");
+            foreach (int boundary in new[] { 10000, 20000, 30000 })
+                assert(Pack("XinJE", new(code + (boundary - 1), DataType.Short), new(code + boundary, DataType.Short)).Count == 2,
+                    $"XinJE XD {code}{boundary} 物理地址分段不跨批");
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
         try

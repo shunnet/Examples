@@ -1,17 +1,17 @@
-using Snet.Core.handler;
+﻿using Snet.Core.handler;
 using Snet.Core.packer;
-using Snet.Model.data;
-using Snet.Model.@enum;
 using Snet.Driver.Core.Address;
-using Snet.Driver.Profinet.AllenBradley;
-using Snet.Driver.Profinet.Melsec;
-using Snet.Driver.Profinet.Omron;
 using Snet.Driver.Core.Device;
+using Snet.Driver.Profinet.AllenBradley;
+using Snet.Driver.Profinet.FATEK;
 using Snet.Driver.Profinet.Fuji;
 using Snet.Driver.Profinet.GE;
-using Snet.Driver.Profinet.FATEK;
+using Snet.Driver.Profinet.Melsec;
+using Snet.Driver.Profinet.Omron;
 using Snet.Driver.Profinet.Panasonic;
 using Snet.Driver.Profinet.Yokogawa;
+using Snet.Model.data;
+using Snet.Model.@enum;
 
 namespace Snet.Core.Samples;
 
